@@ -4,12 +4,16 @@ import re
 from mne.io import read_raw_eeglab
 
 import pandas as pd
+from tqdm import tqdm
+
+import gc
 
 
 def extract_metadata(
     raw,
     stage: str = "pre",
     stage_no: int = -1,
+    patient: str = "000",
     condition_number: int = -1,
     filepath: str = None,
 ):
@@ -21,6 +25,7 @@ def extract_metadata(
     metadata = {
         "stage": stage,
         "stage_no": stage_no,
+        "patient": patient,
         "condition_number": condition_number,
         "filename": os.path.basename(raw.filenames[0]),
         "channels": channels,
@@ -114,6 +119,13 @@ def extract_condition_number(fname):
     else:
         return -1  # if no condition number is found
 
+def extract_patient_number(fname):
+    match = re.search(r'_(\d+)_', fname)
+    if match:
+        return match.group(1)
+
+    return "000"
+
 
 def generate_metadata(input_fnames, eog=(), verbose=True):
     data = {"data": [], "metadata": []}
@@ -129,6 +141,7 @@ def generate_metadata(input_fnames, eog=(), verbose=True):
             stage, stage_no = "unknown", -1
 
         condition_number = extract_condition_number(input_fname)
+        patient_number = extract_patient_number(input_fname)
 
         try:
             raw = read_raw_eeglab(
@@ -146,9 +159,16 @@ def generate_metadata(input_fnames, eog=(), verbose=True):
                 raw,
                 stage=stage,
                 stage_no=stage_no,
+                patient=patient_number,
                 condition_number=condition_number,
                 filepath=input_fname,
             )
+            
+            # Delete the raw object to free up memory
+            del raw
+            
+            # Force garbage collection
+            gc.collect()
 
         except Exception as e:
             print(f"Error in reading {input_fname}: {e}")
@@ -156,7 +176,7 @@ def generate_metadata(input_fnames, eog=(), verbose=True):
             # break
 
         data["metadata"].append(meta)
-        data["data"].append(raw)
+        # data["data"].append(raw)
 
     return data
 
@@ -164,13 +184,15 @@ def generate_metadata(input_fnames, eog=(), verbose=True):
 def main():
 
     verbose = 0
-    directory = "/Users/soroush/Documents/Code/freelance-project/vielight/vielight_close_loop/data/cleaned_data"
+    directory = "C:\Data"
     input_fnames = get_file_paths(directory=directory)
     data = generate_metadata(input_fnames, verbose=verbose)
 
     columns = list(data["metadata"][0].keys())
     df = pd.DataFrame(data["metadata"], columns=columns)
-    df.sort_values(by=["condition_number", "stage_no"], inplace=True)
+    # df.sort_values(by=["condition_number", "stage_no"], inplace=True)
+    df.sort_values(by=["condition_number", "patient", "stage_no"], inplace=True)
+    
     df.to_csv("metadata.csv", index=False)
 
 
