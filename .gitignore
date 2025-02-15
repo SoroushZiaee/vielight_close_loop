@@ -173,3 +173,5 @@ notebooks/wandb/
 *.gif
 *.csv
 *.txt
+*.npy
+*.json
